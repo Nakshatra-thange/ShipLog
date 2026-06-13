@@ -1,13 +1,180 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
-  output   = "../generated/prisma"
+  output   = "../src/generated/prisma/client"
 }
 
 datasource db {
   provider = "postgresql"
+
+}
+
+model Customer {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  googleId      String?   @unique
+  avatarUrl     String?
+  plan          Plan      @default(FREE)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  projects      Project[]
+  subscriptions Subscription[]
+
+  @@map("customers")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  customerId  String
+  name        String
+  domain      String?
+  token       String   @unique @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sessions    Session[]
+  events      Event[]
+  errors      AppError[]
+  insights    Insight[]
+
+  @@map("projects")
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  projectId  String
+  sessionKey String   // The random ID from the tracking script
+  startTime  DateTime @default(now())
+  endTime    DateTime?
+  country    String?
+  city       String?
+  deviceType String?  // mobile | desktop | tablet
+  browser    String?
+  os         String?
+  referrer   String?
+  landingUrl String?
+  createdAt  DateTime @default(now())
+
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  events     Event[]
+
+  @@index([projectId])
+  @@index([sessionKey])
+  @@map("sessions")
+}
+
+model Event {
+  id         String   @id @default(cuid())
+  projectId  String
+  sessionId  String
+  type       EventType
+  page       String
+  element    String?  // CSS selector or text of clicked element
+  x          Float?
+  y          Float?
+  metadata   Json?    // flexible extra data
+  timestamp  DateTime @default(now())
+
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([sessionId])
+  @@index([timestamp])
+  @@map("events")
+}
+
+model AppError {
+  id           String   @id @default(cuid())
+  projectId    String
+  message      String
+  stack        String?
+  page         String
+  affectedUsers Int     @default(1)
+  occurrences  Int      @default(1)
+  status       ErrorStatus @default(OPEN)
+  firstSeen    DateTime @default(now())
+  lastSeen     DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("errors")
+}
+
+model Insight {
+  id         String      @id @default(cuid())
+  projectId  String
+  type       InsightType
+  data       Json        // the raw finding (element, count, loop, etc.)
+  severity   Severity    @default(MEDIUM)
+  date       DateTime    @default(now())
+  createdAt  DateTime    @default(now())
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([date])
+  @@map("insights")
+}
+
+model Subscription {
+  id                 String   @id @default(cuid())
+  customerId         String
+  stripeSubscriptionId String? @unique
+  stripeCustomerId   String?
+  plan               Plan     @default(FREE)
+  status             SubStatus @default(ACTIVE)
+  currentPeriodEnd   DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  customer           Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+enum Plan {
+  FREE
+  BUILDER
+  PRO
+}
+
+enum EventType {
+  CLICK
+  SCROLL
+  NAVIGATE
+  ERROR
+  CUSTOM
+}
+
+enum ErrorStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
+enum InsightType {
+  RAGE_CLICK
+  CONFUSION_LOOP
+  DROP_OFF_WALL
+  DEAD_FEATURE
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SubStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+  TRIALING
 }
